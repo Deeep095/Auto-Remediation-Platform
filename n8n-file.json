@@ -1,0 +1,653 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-agent",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Receive Question",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        1872
+      ],
+      "id": "2f9166c1-569e-4b56-bcf3-c8ad5053cb80",
+      "webhookId": "<redacted_webhook_id>"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT service, metric, value, severity, message, created_at, status FROM incidents ORDER BY created_at DESC LIMIT 50",
+        "options": {}
+      },
+      "name": "Get DB Context",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.1,
+      "position": [
+        -128,
+        1872
+      ],
+      "id": "f5fed2a2-5a2d-42db-a01b-b95a132e6ab4",
+      "credentials": {
+        "postgres": {
+          "id": "<redacted_credential_id>",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst question = $('Receive Question').first().json.body.question;\nconst dbData = items.map(i => i.json);\n\nconst prompt = `You are the InfraGuard AI Assistant.\nA DevOps engineer asked: \"${question}\"\n\nHere is the recent infrastructure incident data:\n${JSON.stringify(dbData, null, 2)}\n\nAnswer the engineer's question clearly and concisely based ONLY on the data above. If asked to recommend an action, be specific. Format your response in plain text.`;\n\nreturn [{\n  json: {\n    gemini_body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })\n  }\n}];"
+      },
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        1872
+      ],
+      "id": "9418d3e7-e92f-4aeb-824f-08c1d0d97c54"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=YOUR_API_KEY_HERE",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.gemini_body }}",
+        "options": {}
+      },
+      "name": "Gemini AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        288,
+        1872
+      ],
+      "id": "d08d8e57-0ae9-441f-acae-63fb64aa3eec"
+    },
+    {
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nlet answer = 'Could not generate answer.';\ntry {\n  answer = res.candidates[0].content.parts[0].text;\n} catch(e) {}\nreturn [{ json: { answer } }];"
+      },
+      "name": "Extract Answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        1872
+      ],
+      "id": "998bb3e9-4275-4b49-9acf-8746e5ec5cf8"
+    },
+    {
+      "parameters": {
+        "path": "api/incidents",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Get Incidents",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        576,
+        1712
+      ],
+      "id": "0d44bef8-70dd-4197-8be1-d33d8193caa4",
+      "webhookId": "<redacted_webhook_id>"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM incidents ORDER BY created_at DESC LIMIT 50",
+        "options": {}
+      },
+      "name": "DB Incidents",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.1,
+      "position": [
+        784,
+        1712
+      ],
+      "id": "ffd6379e-ff24-42f0-a564-b3f33c117eab",
+      "credentials": {
+        "postgres": {
+          "id": "<redacted_credential_id>",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "path": "api/services",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Get Services",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        576,
+        1904
+      ],
+      "id": "59d5b485-65ce-4397-9dbc-b48e8af30523",
+      "webhookId": "<redacted_webhook_id>"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT service, MAX(severity) as severity, MAX(created_at) as last_seen FROM incidents WHERE status='open' GROUP BY service",
+        "options": {}
+      },
+      "name": "DB Services",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.1,
+      "position": [
+        784,
+        1904
+      ],
+      "id": "4804c215-3ce9-4d6e-b301-56b5f5adf1c1",
+      "credentials": {
+        "postgres": {
+          "id": "<redacted_credential_id>",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "path": "api/stats",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Get Stats",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        576,
+        2112
+      ],
+      "id": "f9f585c6-b449-444e-ab64-3c9d7eb550bb",
+      "webhookId": "<redacted_webhook_id>"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) as total, SUM(CASE WHEN severity='P1' AND status='open' THEN 1 ELSE 0 END) as p1_open, SUM(CASE WHEN severity='P2' AND status='open' THEN 1 ELSE 0 END) as p2_open FROM incidents",
+        "options": {}
+      },
+      "name": "DB Stats",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.1,
+      "position": [
+        784,
+        2112
+      ],
+      "id": "d8b7db15-e3b7-4c87-a4a2-ae46127387d2",
+      "credentials": {
+        "postgres": {
+          "id": "<redacted_credential_id>",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/resolve",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Resolve Incident",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        576,
+        2304
+      ],
+      "id": "1ebe6735-af90-48e9-aa8a-a058c339878b",
+      "webhookId": "<redacted_webhook_id>"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE incidents SET status='resolved', resolved_at=NOW() WHERE id = {{$json.body.id}} RETURNING *",
+        "options": {}
+      },
+      "name": "DB Resolve",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.1,
+      "position": [
+        784,
+        2304
+      ],
+      "id": "da9429db-a3da-40c3-946f-5ea1c71317bd",
+      "credentials": {
+        "postgres": {
+          "id": "<redacted_credential_id>",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "incident-ingest",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -1392,
+        2480
+      ],
+      "name": "Alert Ingestion Webhook1",
+      "id": "d04a318d-387c-4520-867c-3fb31fc3a465",
+      "webhookId": "<redacted_webhook_id>"
+    },
+    {
+      "parameters": {
+        "jsCode": "let inputJson = $input.first().json;\nlet raw = inputJson.body || inputJson;\n\nif (typeof raw === 'string') {\n    try { raw = JSON.parse(raw); } catch(e) {}\n} else if (raw && Object.keys(raw).length > 0 && Object.keys(raw)[0].includes('\"Type\"')) {\n    try { raw = JSON.parse(Object.keys(raw)[0]); } catch(e) {}\n}\n\nlet parsed = { ...raw };\n\nif (raw.Type === \"Notification\" && raw.Message) {\n    try {\n        let cwData = typeof raw.Message === 'string' ? JSON.parse(raw.Message) : raw.Message;\n        parsed.source = \"cloudwatch\";\n        parsed.service = cwData.AlarmName || \"unknown-alarm\";\n        parsed.message = cwData.NewStateReason || \"Alarm triggered\";\n        \n        if (cwData.NewStateValue === \"ALARM\") {\n            parsed.metric = \"cpu_usage\";\n            parsed.value = 100;\n        }\n        \n        if (cwData.Trigger && cwData.Trigger.Dimensions && cwData.Trigger.Dimensions.length > 0) {\n            parsed.instance_id = cwData.Trigger.Dimensions[0].value;\n        }\n    } catch(e) {\n        parsed.message = \"Failed to parse inner CloudWatch message\";\n    }\n}\n\nreturn [{ json: { \n  alert_id: parsed.alert_id || parsed.id || 'alert_' + Date.now(), \n  source: parsed.source || 'unknown', \n  service: parsed.service || 'untagged', \n  metric: parsed.metric || 'unknown', \n  value: parsed.value !== undefined ? parsed.value : null, \n  threshold: parsed.threshold || null, \n  message: parsed.message || 'No description', \n  environment: parsed.environment || 'production', \n  region: parsed.region || 'us-east-1', \n  instance_id: parsed.instance_id || null, \n  timestamp: parsed.timestamp || new Date().toISOString(),\n  raw_payload: JSON.stringify(raw)\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1136,
+        2448
+      ],
+      "name": "Normalize Alert Payload1",
+      "id": "dab7d792-e96d-4791-a6f3-0db6f2c17b2c"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "value": "incidents",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "alert_id": "={{ $json.alert_id }}",
+            "service": "={{ $json.service }}",
+            "value": "={{ $json.value }}",
+            "metric": "={{ $json.metric }}",
+            "environment": "={{ $json.environment }}",
+            "message": "={{ $json.message }}",
+            "created_at": "={{ $json.timestamp }}",
+            "source": "={{ $json.source }}",
+            "severity": "low"
+          },
+          "matchingColumns": [
+            "alert_id"
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -864,
+        2448
+      ],
+      "name": "Insert rows in a table1",
+      "id": "ed9793f2-602f-43a0-811d-65551114cb81",
+      "credentials": {
+        "postgres": {
+          "id": "<redacted_credential_id>",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const a = $input.first().json;\nlet s = 'P3', u = 'low', r = false, rt = null;\n\nif (a.environment === 'production') {\n  if (a.metric === 'health_check' && (a.value === 'down' || a.value == 0)) { s = 'P1'; u = 'critical'; r = true; rt = 'restart_service'; }\n  if (a.metric === 'error_rate' && Number(a.value) > 50) { s = 'P1'; u = 'critical'; }\n  if (a.metric === 'cpu_usage' && Number(a.value) > 95) { s = 'P1'; u = 'critical'; r = true; rt = 'scale_up'; }\n}\n\nif (s === 'P3' && a.environment === 'production') {\n  if (a.metric === 'cpu_usage' && Number(a.value) > 80) { s = 'P2'; u = 'high'; }\n  if (a.metric === 'memory_usage' && Number(a.value) > 85) { s = 'P2'; u = 'high'; r = true; rt = 'restart_service'; }\n}\n\nreturn [{ json: { ...a, severity: s, urgency: u, requires_remediation: r, remediation_type: rt } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        2448
+      ],
+      "name": "Classify Severity (P1/P2/P3)1",
+      "id": "38990f6c-4767-4331-b026-371ba4e888a8"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.severity }}",
+                    "rightValue": "P1",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "P1 Critical"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.severity }}",
+                    "rightValue": "P2",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "P2 Warning"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.severity }}",
+                    "rightValue": "P3",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "P3 Low"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        -352,
+        2432
+      ],
+      "name": "Route by Severity1",
+      "id": "330d7d25-0edf-4dea-8fc3-dcbe496f82bc"
+    },
+    {
+      "parameters": {
+        "jsCode": "const alert = $input.first().json;\nconst prompt = `You are an expert SRE.\\nA production alert fired.\\nAnalyze and provide:\\n1. Probable Root Cause\\n2. Immediate Actions\\n\\nDetails:\\nService: ${alert.service}\\nMetric: ${alert.metric} = ${alert.value}\\nMessage: ${alert.message}`;\nreturn [{ json: { ...alert, gemini_body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        16,
+        2272
+      ],
+      "name": "Build AI Prompt1",
+      "id": "9c0302ce-ff5b-4926-ba63-a895fa5b2b6e"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=YOUR_API_KEY_HERE",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.gemini_body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        368,
+        2272
+      ],
+      "name": "Gemini AI Analysis1",
+      "id": "bfe2a567-4500-41e4-8668-02b7fca1c93b"
+    },
+    {
+      "parameters": {
+        "jsCode": "const geminiResponse = $input.first().json;\nconst alert = $('Build AI Prompt1').first().json;\nlet aiAnalysis = \"Could not parse AI response\";\ntry { aiAnalysis = geminiResponse.candidates[0].content.parts[0].text; } catch(e) {}\nconst slackMessage = `🚨 *P1 CRITICAL INCIDENT*\\n*Service:* ${alert.service}\\n*AI Analysis:*\\n${aiAnalysis}`;\nreturn [{ json: { ...alert, ai_analysis: aiAnalysis, slack_body: JSON.stringify({ text: slackMessage }) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        2272
+      ],
+      "name": "Format AI + Build Slack1",
+      "id": "bfe2a567-4500-41e4-8668-02b7fca1c93b"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://hooks.slack.com/services/YOUR_SLACK_WEBHOOK_URL",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.slack_body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1056,
+        2272
+      ],
+      "name": "Slack P1 Critical1",
+      "id": "6d555e70-844d-475a-948c-c27ac2d892c3"
+    }
+  ],
+  "connections": {
+    "Receive Question": {
+      "main": [
+        [
+          {
+            "node": "Get DB Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get DB Context": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini AI": {
+      "main": [
+        [
+          {
+            "node": "Extract Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Incidents": {
+      "main": [
+        [
+          {
+            "node": "DB Incidents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Services": {
+      "main": [
+        [
+          {
+            "node": "DB Services",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Stats": {
+      "main": [
+        [
+          {
+            "node": "DB Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Incident": {
+      "main": [
+        [
+          {
+            "node": "DB Resolve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alert Ingestion Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Normalize Alert Payload1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Alert Payload1": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert rows in a table1": {
+      "main": [
+        [
+          {
+            "node": "Classify Severity (P1/P2/P3)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Severity (P1/P2/P3)1": {
+      "main": [
+        [
+          {
+            "node": "Route by Severity1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Severity1": {
+      "main": [
+        [
+          {
+            "node": "Build AI Prompt1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build AI Prompt1": {
+      "main": [
+        [
+          {
+            "node": "Gemini AI Analysis1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini AI Analysis1": {
+      "main": [
+        [
+          {
+            "node": "Format AI + Build Slack1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format AI + Build Slack1": {
+      "main": [
+        [
+          {
+            "node": "Slack P1 Critical1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "<redacted_instance_id>"
+  }
+}

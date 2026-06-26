@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>InfraGuard Platform</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="header">
+        <h1>🛡️ InfraGuard Dashboard</h1>
+        <div class="stats-bar" id="stats-bar">Loading stats...</div>
+    </div>
+    
+    <div class="service-grid" id="service-grid"></div>
+    <div class="main-container">
+        <div class="incident-feed">
+            <h2>Live Incident Feed</h2>
+            <div id="incidents-list"></div>
+        </div>
+        <div class="ai-chat">
+            <h2>🤖 InfraGuard AI Assistant</h2>
+            <div class="chat-window" id="chat-window">
+                <div class="msg ai">Hello! I'm your AI infrastructure assistant. Ask me anything about our recent incidents or service health.</div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="chat-input" placeholder="Why did payment-api crash yesterday?">
+                <button onclick="sendChatMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
